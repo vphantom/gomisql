@@ -126,9 +126,16 @@ Running the following would cause migrations foo and bar, then baz to be install
 gomisql -y -a "--batch --user dbuser" deploy baz
 ```
 
-## MIT License
+## ACKNOWLEDGEMENTS
+
+Graph X Design Inc. https://www.gxd.ca/ sponsored this project.
+
+## LICENSE AND COPYRIGHT
 
 Copyright (c) 2018 Stéphane Lavergne <https://github.com/vphantom>
+
+This program is distributed under the MIT (X11) License:
+http://www.opensource.org/licenses/mit-license.php
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
