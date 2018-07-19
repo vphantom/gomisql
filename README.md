@@ -1,8 +1,8 @@
-# gomisql v0.0.1
+# SQL Good Migrations (gomisql)
 
 [![license](https://img.shields.io/github/license/vphantom/gomisql.svg?style=plastic)]() [![GitHub release](https://img.shields.io/github/release/vphantom/gomisql.svg?style=plastic)]()
 
-SQL Good Migrations, tiny stand-alone database upgrade/downgrade manager with dependency support
+Tiny stand-alone database upgrade/downgrade manager with dependency support.
 
 - Single file, runs on any POSIX shell (sh, ash, dash, ksh, bash...)
 - Compatible with stdin-friendly backends (MySQL/MariaDB, SQLite3, PostgreSQL...)
@@ -23,10 +23,30 @@ Just download the stand-alone `gomisql` shell script and make it executable. ;-)
 ### Options
 
 - `-h` Display help
+- `-d` Display all executed SQL and back-end output
 - `-y` Automatic "yes" to prompts
-- `-d <path>` Location of the SQL files [default: `./migrations/`]
+- `-p <path>` Location of the SQL files [default: `./migrations/`]
 - `-b <cmd>` Name of back-end command [default: `mysql`]
-- `-d <args>` Arguments to pass to back-end command [default: `--batch`]
+- `-a <args>` Arguments to pass to back-end command [default: `--batch`]
+
+#### SQLite3 Example
+
+```sh
+gomisql -b sqlite3 -a "-batch testdb.sqlite" list
+```
+
+#### MySQL Example
+
+```sh
+# Assuming you are configured for non-interactive authentication
+gomisql -b mysql -a "--batch --user someuser somedb" list
+```
+
+#### PostgreSQL Example
+
+```sh
+gomisql -b psql -a "-d somedb -h somehost -w -U someuser" list
+```
 
 ### Commands
 
@@ -34,9 +54,9 @@ Just download the stand-alone `gomisql` shell script and make it executable. ;-)
 
 Run all validations to discover which still need deployment.
 
-#### `gomisql [opts] deploy <name>`
+#### `gomisql [opts] deploy [<name>]`
 
-Deploy migration `name`.  If any dependency is missing, you will be prompted with the list to be installed.  (Use `-y` to agree by default.)
+Deploy migration `name`, or all avaliable if not specified.  If any dependency is missing, you will be prompted with the list to be installed.  (Use `-y` to agree by default.)
 
 #### `gomisql [opts] revert <name>`
 
@@ -48,7 +68,7 @@ A migration file is a standard SQL file with special comments.  Standard multili
 
 ### `-- #Dependencies: ...`
 
-Optional.  Explicitly name other migration file names (without the `.sql` extension) which must be deployed and valid before attempting to deploy this one.
+Optional.  Explicitly name other migration file basenames (without the `.sql` extension) which must be deployed and valid before attempting to deploy this one.
 
 ### `-- #Deploy:`
 
@@ -103,7 +123,7 @@ This is ignored
 Running the following would cause migrations foo and bar, then baz to be installed if missing:
 
 ```sh
-gomisql -y -d "--batch --user dbuser" deploy baz
+gomisql -y -a "--batch --user dbuser" deploy baz
 ```
 
 ## MIT License

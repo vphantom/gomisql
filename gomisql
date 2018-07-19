@@ -1,0 +1,240 @@
+#!/bin/dash
+
+# Get script's dirname in a POSIX way.
+# https://www.jasan.tk/posix/2017/05/11/posix_shell_dirname_replacement
+a="/$0"; a=${a%/*}; a=${a#/}; a=${a:-.}; BINDIR=$(cd "$a"; pwd)
+
+VERSION="0.1.1"
+
+# Default values
+MIGRATIONS_PATH="./migrations/"
+DEBUG=0
+INTERACTIVE=1
+BACKEND="mysql"
+BACKEND_ARGS="--batch"
+
+
+## Functions
+
+backend() {
+    if [ $DEBUG -ne 0 ]; then
+        IN=$(cat)
+        echo "$IN"
+        echo "$IN" |$BACKEND $BACKEND_ARGS
+    else
+        $BACKEND $BACKEND_ARGS >/dev/null 2>&1
+    fi
+}
+
+get_deps() {
+    sed -E 's/^--[ ]*#Dependencies:[ ]*(.*)[ ]*$/\1/;t;d' "${MIGRATIONS_PATH}/${1}.sql"
+}
+
+get_deploy() {
+    sed -E '/^--[ ]*#Deploy:.*$/,/^--/!d;/^(--.*|)$/d' "${MIGRATIONS_PATH}/${1}.sql"
+}
+
+get_verify() {
+    sed -E '/^--[ ]*#Verify:.*$/,/^--/!d;/^(--.*|)$/d' "${MIGRATIONS_PATH}/${1}.sql"
+}
+
+get_revert() {
+    sed -E '/^--[ ]*#Revert:.*$/,/^--/!d;/^(--.*|)$/d' "${MIGRATIONS_PATH}/${1}.sql"
+}
+
+all_migrations() {
+    for MF in ${MIGRATIONS_PATH}/*.sql; do
+        echo $(basename "$MF" ".sql")
+    done
+}
+
+who_needs() {
+    MFS=$(all_migrations)
+    for MF in $MFS; do
+        DEPS=$(get_deps "$MF")
+        if echo "$DEPS" |grep -wq "$1"; then
+            # FIXME: we rely on our output, so we MUST mute backend() even in DEBUG mode. :-(
+            if get_verify "$MF" |backend >/dev/null 2>&1; then
+                echo "$MF"
+            fi
+        fi
+    done
+}
+
+deploy() {
+    # We use the function stack to manage dependencies.  It's up to us to avoid circular ones.
+    if echo "$DEPLOYMENTS" |grep -wq "$1"; then
+        return
+    fi
+    DEPLOYMENTS="$DEPLOYMENTS $1"
+    VERIFY=$(get_verify "$1")
+    if echo "$VERIFY" |backend; then
+        echo "  **  Already deployed: $1"
+        return
+    fi
+    DEPS=$(get_deps "$1")
+    for DEP in $DEPS; do
+        if ! deploy "$DEP"; then
+            return 1
+        fi
+    done
+    get_deploy "$1" |backend
+    if echo "$VERIFY" |backend; then
+        echo "  **  Successfully deployed: $1"
+    else
+        echo "  **  FAILED TO DEPLOY: $1"
+        return 1
+    fi
+}
+
+deploy_all() {
+    MFS=$(all_migrations)
+    for MF in $MFS; do
+        deploy "$MF"
+    done
+}
+
+verify() {
+    get_verify "$1" |backend
+}
+
+verify_all() {
+    MFS=$(all_migrations)
+    MFS_OK=""
+    MFS_ERR=""
+    for MF in $MFS; do
+        if verify "$MF"; then
+            MFS_OK="${MFS_OK} ${MF}"
+        else
+            MFS_ERR="${MFS_ERR} ${MF}"
+        fi
+    done
+}
+
+revert() {
+    VERIFY=$(get_verify "$1")
+    if ! echo "$VERIFY" |backend; then
+        echo "  **  Already reverted: $1"
+        return
+    fi
+    DEPENDENTS=$(who_needs "$1")
+    if test -n "$DEPENDENTS"; then
+        echo "  **  NOT REVERTING, some installed migrations depend on $1:"
+        echo "$DEPENDENTS"
+        return 1
+    fi
+    get_revert "$1" |backend
+    if echo "$VERIFY" |backend; then
+        echo "  **  FAILED TO REVERT: $1"
+        return 1
+    else
+        echo "  **  Reverted: $1"
+    fi
+}
+
+status() {
+    if [ -n "$MFS_OK" ]; then
+        echo
+        echo "  **  Installed migrations:"
+        echo $MFS_OK
+        echo
+    fi
+    if [ -n "$MFS_ERR" ]; then
+        echo
+        echo "  **  Available, non-installed migrations:"
+        echo $MFS_ERR
+        echo
+    fi
+}
+
+## Main Program
+
+MODE=""
+MFS=""
+MFS_OK=""
+MFS_ERR=""
+DEPLOYMENTS=""
+while getopts ":hdyp:b:a:" OPT; do
+    case $OPT in
+        h)
+            MODE="help"
+        ;;
+        d)
+            echo "  **  DEBUGGING ENABLED"
+            DEBUG=1
+        ;;
+        y)
+            INTERACTIVE=0
+        ;;
+        p)
+            MIGRATIONS_PATH="$OPTARG"
+        ;;
+        b)
+            BACKEND="$OPTARG"
+        ;;
+        a)
+            BACKEND_ARGS="$OPTARG"
+        ;;
+        \?)
+            echo "gomisql: Invalid option '-$OPTARG'"
+            exit 1
+        ;;
+        :)
+            echo "gomisql: Option '$OPTARG' requires an argument"
+            exit 1
+        ;;
+    esac
+done
+
+shift $((OPTIND - 1))
+if [ -z "$MODE" ]; then MODE="$1"; fi
+if [ -n "$MODE" ]; then shift; fi
+
+case $MODE in
+    list)
+        verify_all
+        status
+    ;;
+    deploy)
+        TARGET="$1"
+        if [ -z "$TARGET" ]; then
+            deploy_all
+            status
+        else
+            TARGET_FILE="${MIGRATIONS_PATH}/${TARGET}.sql"
+            if test ! -e "${TARGET_FILE}"; then echo "File not found: ${TARGET_FILE}"; exit 1; fi
+            deploy "$1"
+        fi
+    ;;
+    revert)
+        TARGET="$1"
+        if [ -z "$TARGET" ]; then echo "Missing migration name"; exit 1; fi
+        TARGET_FILE="${MIGRATIONS_PATH}/${TARGET}.sql"
+        if test ! -e "${TARGET_FILE}"; then echo "File not found: ${TARGET_FILE}"; exit 1; fi
+        revert "$1"
+    ;;
+    *)
+        cat <<__EOF__
+
+SQL Good Migrations v${VERSION}
+
+Options:
+
+-h            Display this help
+-d            Display all executed SQL and back-end output
+-y            Automatic "yes" to prompts
+-p <path>     Location of migration SQL files [default: '${MIGRATIONS_PATH}']
+-b <cmd>      Name of back-end command [default: '${BACKEND}']
+-a <args>     Arguments to pass to back-end command [default: '${BACKEND_ARGS}']
+
+Commands:
+
+gomisql [opts] list           Run all validations to discover which still need deployment
+gomisql [opts] deploy [name]  Deploy migration "name", or all available if not specified
+gomisql [opts] revert name    Revert migration "name"
+
+__EOF__
+    ;;
+esac
+
+exit 0
