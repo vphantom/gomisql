@@ -12,9 +12,11 @@ Tiny stand-alone database upgrade/downgrade manager with dependency support.
 - Migrations are verified for success
 - Migrations can be reverted
 
+
 ## Why Another SQL Migration Manager?
 
 I wanted a migration tool similar in functionality to the excellent https://sqitch.org/ but without the run-time dependencies on Perl and a lot of modules.  I looked into https://github.com/mbucc/shmig which is a shell script, but doesn't support dependencies between migrations themselves.  I ended up "rolling my own" and gomiSQL was born.
+
 
 ## Installation & Usage
 
@@ -24,10 +26,16 @@ Just download the stand-alone `gomisql` shell script and make it executable. ;-)
 
 - `-h` Display help
 - `-d` Display all executed SQL and back-end output
-- `-y` Automatic "yes" to prompts
 - `-p <path>` Location of the SQL files [default: `./migrations/`]
 - `-b <cmd>` Name of back-end command [default: `mysql`]
 - `-a <args>` Arguments to pass to back-end command [default: `--batch`]
+
+Several environment variables can also be used, although command line options have priority:
+
+- `GOMISQL_DEBUG` (set non-empty to enable)
+- `GOMISQL_PATH`
+- `GOMISQL_BACKEND`
+- `GOMISQL_ARGS`
 
 #### SQLite3 Example
 
@@ -52,15 +60,15 @@ gomisql -b psql -a "-d somedb -h somehost -w -U someuser" list
 
 #### `gomisql [opts] list`
 
-Run all validations to discover which still need deployment.
+Run all validations to discover which are and aren't deployed.
 
 #### `gomisql [opts] deploy [<name>]`
 
-Deploy migration `name`, or all avaliable if not specified.  If any dependency is missing, you will be prompted with the list to be installed.  (Use `-y` to agree by default.)
+Deploy migration `name` and dependencies, or all avaliable if not specified.
 
 #### `gomisql [opts] revert <name>`
 
-Revert migration `name`.  If any migration depends on `name`, you will be prompted with the list to be removed.  Note that if any migration in the dependency chain is missing a `Revert` block, the migration will not be reverted.
+Revert migration `name`.  Aborts if any deployed migration depends on `name`, displaying which.
 
 ## Migration Files
 
@@ -126,9 +134,19 @@ Running the following would cause migrations foo and bar, then baz to be install
 gomisql -y -a "--batch --user dbuser" deploy baz
 ```
 
+## FUTURE ENHANCEMENTS
+
+Dependencies are installed outright during deployment; it would be better if a list was displayed and the user was asked to accept, along with a `-y` option to assume "yes" (like `apt-get`).
+
+Similarly, instead of aborting when a reversion is impossible, it would be better to display the list of migrations which would need to be reverted and prompt for approval.
+
+Both the above imply maintaining a list of migrations to be deployed or removed in memory instead of doing it as we go, which while feasible isn't an absolute necessity for now.
+
+
 ## ACKNOWLEDGEMENTS
 
 Graph X Design Inc. https://www.gxd.ca/ sponsored this project.
+
 
 ## LICENSE AND COPYRIGHT
 
