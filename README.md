@@ -40,20 +40,20 @@ Several environment variables can also be used, although command line options ha
 #### SQLite3 Example
 
 ```sh
-gomisql -b sqlite3 -a "-batch testdb.sqlite" list
+gomisql -b sqlite3 -a testdb.sqlite list
 ```
 
 #### MySQL Example
 
 ```sh
 # Assuming you are configured for non-interactive authentication
-gomisql -b mysql -a "--batch --user someuser somedb" list
+gomisql -a "--user someuser somedb" list
 ```
 
 #### PostgreSQL Example
 
 ```sh
-gomisql -b psql -a "-d somedb -h somehost -w -U someuser" list
+gomisql -b psql -a "-d somedb -h somehost -U someuser" list
 ```
 
 ### Commands
@@ -61,6 +61,10 @@ gomisql -b psql -a "-d somedb -h somehost -w -U someuser" list
 #### `gomisql [opts] list`
 
 Run all validations to discover which are and aren't deployed.
+
+#### `gomisql [opts] create <name>`
+
+Create empty migration `name` from handy template.
 
 #### `gomisql [opts] deploy [<name>]`
 
@@ -84,7 +88,25 @@ Mandatory.  Begins SQL code to run when deploying the migration.  Ends at the ne
 
 ### `-- #Verify:`
 
-Mandatory.  Begins SQL code to run to prove that a migration was successfully deployed.  Ends at the next single-line comment.  Verifications are run after deployments and whenever gomisql needs to check dependencies.
+Mandatory.  Begins SQL code to run to prove that a migration was successfully deployed.  Ends at the next single-line comment.  Verifications are run after deployments and whenever dependencies need checking.  **CAUTION:** While you may technically omit this section, doing so means the migration is considered to be already deployed and is thus not deployable!
+
+To test whether a table or some columns exist, just select them with a false condition, as the SQL back-end will fail and let us know:
+
+```sql
+BEGIN;
+/* Prove that foo.col1, foo.col2 and foo.col3 exist in schema. */
+SELECT col1, col2, col3 FROM foo WHERE 0;
+ROLLBACK;
+```
+
+To test whether a specific row exists, make the back-end output `#FAIL` which will be recognized as a failure.  Forcing the presence of results with `COUNT(*)` does the trick, along with `COALESCE()`.  Be sure to use one distinct `SELECT` per row to check, so that any missing row causes a failure.
+
+```sql
+BEGIN;
+/* Output '#FAIL' if user 23 does not exist. */
+SELECT COALESCE(id, '#FAIL', COUNT(*)) AS id FROM users WHERE id='23';
+ROLLBACK;
+```
 
 ### `-- #Revert:`
 
@@ -109,19 +131,25 @@ This is ignored!
 
 -- #Deploy:
 
+BEGIN;
 CREATE TABLE IF NOT EXISTS users (
     `id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(255) NOT NULL DEFAULT '',
     PRIMARY KEY (id)
 );
+COMMIT;
 
 -- #Verify:
 
+BEGIN;
 SELECT id, name FROM users WHERE 0;
+ROLLBACK;
 
 -- #Revert:
 
+BEGIN;
 DROP TABLE users;
+COMMIT;
 
 -- This is ignored
 

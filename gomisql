@@ -31,13 +31,13 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 
 # Default values
 DEBUG=0
 MPATH="./migrations/"
-BACKEND="mysql"
-BACKEND_ARGS="--batch"
+BACKEND="mysql --batch"
+BACKEND_ARGS=""
 
 # Environment overrides
 if [ -n "$GOMISQL_DEBUG"   ]; then DEBUG="$GOMISQL_DEBUG";       fi
@@ -47,14 +47,20 @@ if [ -n "$GOMISQL_ARGS"    ]; then BACKEND_ARGS="$GOMISQL_ARGS"; fi
 
 ## Functions
 
+# Needs to return a status if backend failed or '#FAIL' found in output
 backend() {
-    if [ $DEBUG -ne 0 ]; then
-        IN=$(cat)
-        echo "$IN"
-        echo "$IN" |$BACKEND $BACKEND_ARGS
+    IN=$(cat)
+    ERR=0
+    if OUT=$(echo "$IN" |$BACKEND $BACKEND_ARGS 2>&1); then
+        if echo "$OUT" |grep -q '#FAIL'; then
+            if [ $DEBUG -ne 0 ]; then echo "Found '#FAIL' in back-end output, migration is not deployed."; fi
+            ERR=2
+        fi
     else
-        $BACKEND $BACKEND_ARGS >/dev/null 2>&1
+        ERR=1
     fi
+    if [ $DEBUG -ne 0 ]; then echo "$IN"; fi
+    return $ERR
 }
 
 get_deps() {
@@ -99,8 +105,7 @@ deploy() {
         return
     fi
     DEPLOYMENTS="$DEPLOYMENTS $1"
-    VERIFY=$(get_verify "$1")
-    if echo "$VERIFY" |backend; then
+    if get_verify "$1" |backend; then
         MFS_OK="$MFS_OK $1"
         if [ $DEBUG -ne 0 ]; then echo "  **  Already deployed: $1"; fi
         return
@@ -113,7 +118,8 @@ deploy() {
         fi
     done
     get_deploy "$1" |backend
-    if echo "$VERIFY" |backend; then
+    # Must get_verify() twice because POSIX doesn't specify local variables
+    if get_verify "$1" |backend; then
         MFS_OK="$MFS_OK $1"
         echo "  **  Successfully deployed: $1"
     else
@@ -149,9 +155,9 @@ verify_all() {
     MFS_ERR=""
     for MF in $MFS; do
         if verify "$MF"; then
-            MFS_OK="${MFS_OK} ${MF}"
+            MFS_OK="$MFS_OK $MF"
         else
-            MFS_ERR="${MFS_ERR} ${MF}"
+            MFS_ERR="$MFS_ERR $MF"
         fi
     done
 }
@@ -212,7 +218,21 @@ while getopts ":hdp:b:a:" OPT; do
             MPATH="$OPTARG"
         ;;
         b)
-            BACKEND="$OPTARG"
+            case $OPTARG in
+                mysql)
+                    BACKEND="mysql --batch --skip-column-names --disable-pager"
+                ;;
+                sqlite|sqlite3)
+                    BACKEND="sqlite3 -bail -batch -noheader"
+                ;;
+                postgresql|postgres|pgsql|psql|pg)
+                    BACKEND="psql -w"
+                ;;
+                *)
+                    echo "gomisql: Unknown back-end '$OPTARG'"
+                    exit 1
+                ;;
+            esac
         ;;
         a)
             BACKEND_ARGS="$OPTARG"
@@ -237,6 +257,33 @@ case $MODE in
         verify_all
         status
     ;;
+    create)
+        TARGET="$1"
+        TARGET_FILE="${MPATH}/${TARGET}.sql"
+        if test -z "$TARGET"; then echo "Missing migration name"; exit 1; fi
+        if test -e "$TARGET_FILE"; then echo "Migration already exists: $TARGET_FILE"; exit 2; fi
+        cat >"$TARGET_FILE" <<__EOF__
+
+-- #Dependencies: 
+
+-- #Deploy:
+
+BEGIN;
+COMMIT;
+
+-- #Verify:
+
+BEGIN;
+SELECT no_such_column FROM no_such_table WHERE 0;
+ROLLBACK;
+
+-- #Revert:
+
+BEGIN;
+COMMIT;
+
+__EOF__
+    ;;
     deploy)
         TARGET="$1"
         if [ -z "$TARGET" ]; then
@@ -244,7 +291,7 @@ case $MODE in
             status
         else
             TARGET_FILE="${MPATH}/${TARGET}.sql"
-            if test ! -e "${TARGET_FILE}"; then echo "File not found: ${TARGET_FILE}"; exit 1; fi
+            if test ! -e "$TARGET_FILE"; then echo "File not found: $TARGET_FILE"; exit 1; fi
             deploy "$1"
         fi
     ;;
@@ -252,7 +299,7 @@ case $MODE in
         TARGET="$1"
         if [ -z "$TARGET" ]; then echo "Missing migration name"; exit 1; fi
         TARGET_FILE="${MPATH}/${TARGET}.sql"
-        if test ! -e "${TARGET_FILE}"; then echo "File not found: ${TARGET_FILE}"; exit 1; fi
+        if test ! -e "$TARGET_FILE"; then echo "File not found: $TARGET_FILE"; exit 1; fi
         revert "$1"
     ;;
     *)
@@ -265,12 +312,13 @@ Options:
 -h            Display this help
 -d            Display all executed SQL and back-end output
 -p <path>     Location of migration SQL files [default: '${MPATH}']
--b <cmd>      Name of back-end command [default: '${BACKEND}']
--a <args>     Arguments to pass to back-end command [default: '${BACKEND_ARGS}']
+-b <backend>  Back-end, one of: mysql (default), sqlite[3], postgresql|pgsql
+-a <args>     Arguments to pass to back-end command (batch mode is already set)
 
 Commands:
 
 gomisql [opts] list           Run all validations to discover which still need deployment
+gomisql [opts] create         Create empty migration "name" from handy template
 gomisql [opts] deploy [name]  Deploy migration "name" and dependencies, or all available if not specified
 gomisql [opts] revert name    Revert migration "name", if none deployed depend on it
 
