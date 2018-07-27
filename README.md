@@ -28,7 +28,7 @@ Just download the stand-alone `gomisql` shell script and make it executable. ;-)
 - `-d` Display all executed SQL and back-end output
 - `-p <path>` Location of the SQL files [default: `./migrations/`]
 - `-b <cmd>` Name of back-end command [default: `mysql`]
-- `-a <args>` Arguments to pass to back-end command [default: `--batch`]
+- `-a <args>` Additional arguments to pass to back-end command (batch mode is already set)
 
 Several environment variables can also be used, although command line options have priority:
 
@@ -159,7 +159,7 @@ This is ignored
 Running the following would cause migrations foo and bar, then baz to be installed if missing:
 
 ```sh
-gomisql -y -a "--batch --user dbuser" deploy baz
+gomisql -y -a "--user dbuser" deploy baz
 ```
 
 ## FUTURE ENHANCEMENTS

@@ -31,13 +31,13 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-VERSION="0.3.0"
+VERSION="0.3.1"
 
 # Default values
 DEBUG=0
 MPATH="./migrations/"
-BACKEND="mysql --batch"
-BACKEND_ARGS=""
+BACKEND="mysql"
+BACKEND_ARGS="--batch --skip-column-names --disable-pager"
 
 # Environment overrides
 if [ -n "$GOMISQL_DEBUG"   ]; then DEBUG="$GOMISQL_DEBUG";       fi
@@ -91,7 +91,7 @@ who_needs() {
     for MF in $MFS; do
         DEPS=$(get_deps "$MF")
         if echo "$DEPS" |grep -wq "$1"; then
-            # FIXME: we rely on our output, so we MUST mute backend() even in DEBUG mode. :-(
+            # NOTE: we rely on our output, so we MUST mute backend() even in DEBUG mode. :-(
             if get_verify "$MF" |backend >/dev/null 2>&1; then
                 echo "$MF"
             fi
@@ -220,8 +220,8 @@ while getopts ":hdp:b:a:" OPT; do
         b)
             case $OPTARG in
                 mysql)
-                    BACKEND="mysql --batch --skip-column-names --disable-pager"
-                ;;
+                    BACKEND="mysql"
+                 ;;
                 sqlite|sqlite3)
                     BACKEND="sqlite3 -bail -batch -noheader"
                 ;;
@@ -235,7 +235,7 @@ while getopts ":hdp:b:a:" OPT; do
             esac
         ;;
         a)
-            BACKEND_ARGS="$OPTARG"
+            BACKEND_ARGS="$OPTARG $BACKEND_ARGS"
         ;;
         \?)
             echo "gomisql: Invalid option '-$OPTARG'"
@@ -313,7 +313,7 @@ Options:
 -d            Display all executed SQL and back-end output
 -p <path>     Location of migration SQL files [default: '${MPATH}']
 -b <backend>  Back-end, one of: mysql (default), sqlite[3], postgresql|pgsql
--a <args>     Arguments to pass to back-end command (batch mode is already set)
+-a <args>     Additional arguments to pass to back-end command (batch mode is already set)
 
 Commands:
 
