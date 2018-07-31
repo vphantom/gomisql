@@ -108,6 +108,17 @@ SELECT COALESCE(id, '#FAIL', COUNT(*)) AS id FROM users WHERE id='23';
 ROLLBACK;
 ```
 
+Similarly, to test whether an index exists, at least in MySQL which I could test, use `information_schema.statistics`:
+
+```sql
+BEGIN;
+SELECT COALESCE(index_schema, '#FAIL', COUNT(*)) AS name FROM information_schema.statistics
+	WHERE table_schema=DATABASE() AND table_name='users' AND index_name='some_name'
+;
+ROLLBACK;
+```
+
+
 ### `-- #Revert:`
 
 Optional.  Begins SQL code to run to revert the migration.  Ends at the next single-line comment.
