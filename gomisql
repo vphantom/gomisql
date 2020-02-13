@@ -31,7 +31,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-VERSION="0.3.1"
+VERSION="0.3.2"
 
 # Default values
 DEBUG=0
@@ -50,6 +50,7 @@ if [ -n "$GOMISQL_ARGS"    ]; then BACKEND_ARGS="$GOMISQL_ARGS"; fi
 # Needs to return a status if backend failed or '#FAIL' found in output
 backend() {
     IN=$(cat)
+	ERR_ECHO=${1:-0}
     ERR=0
     if OUT=$(echo "$IN" |$BACKEND $BACKEND_ARGS 2>&1); then
         if echo "$OUT" |grep -q '#FAIL'; then
@@ -59,7 +60,7 @@ backend() {
     else
         ERR=1
     fi
-    if [ $DEBUG -ne 0 ]; then echo "$IN"; fi
+    if [ $DEBUG -ne 0 ] || [ $ERR -gt 0 -a $ERR_ECHO -gt 0 ]; then echo ">>> $IN"; echo "<<< $OUT"; fi
     return $ERR
 }
 
@@ -117,7 +118,7 @@ deploy() {
             return 1
         fi
     done
-    get_deploy "$1" |backend
+    get_deploy "$1" |backend 1
     # Must get_verify() twice because POSIX doesn't specify local variables
     if get_verify "$1" |backend; then
         MFS_OK="$MFS_OK $1"
@@ -146,7 +147,7 @@ verify() {
             exit 2
         fi
     done
-    get_verify "$1" |backend
+    get_verify "$1" |backend 1
 }
 
 verify_all() {
@@ -174,7 +175,7 @@ revert() {
         echo "$DEPENDENTS"
         return 1
     fi
-    get_revert "$1" |backend
+    get_revert "$1" |backend 1
     if echo "$VERIFY" |backend; then
         echo "  **  FAILED TO REVERT: $1"
         return 1
