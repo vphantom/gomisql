@@ -189,7 +189,7 @@ Graph X Design Inc. https://www.gxd.ca/ sponsored this project.
 
 ## LICENSE AND COPYRIGHT
 
-Copyright (c) 2018 Stéphane Lavergne <https://github.com/vphantom>
+Copyright (c) 2018-2022 Stéphane Lavergne <https://github.com/vphantom>
 
 This program is distributed under the MIT (X11) License:
 http://www.opensource.org/licenses/mit-license.php

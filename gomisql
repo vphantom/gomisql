@@ -8,7 +8,7 @@
 #
 # LICENSE AND COPYRIGHT
 #
-# Copyright (c) 2018 Stéphane Lavergne <https://github.com/vphantom>
+# Copyright (c) 2018-2022 Stéphane Lavergne <https://github.com/vphantom>
 #
 # This program is distributed under the MIT (X11) License:
 # http://www.opensource.org/licenses/mit-license.php
@@ -275,7 +275,13 @@ COMMIT;
 -- #Verify:
 
 BEGIN;
-SELECT no_such_column FROM no_such_table WHERE 0;
+/* Column some_table.some_column exists: */
+SELECT some_column FROM some_table WHERE 0;
+/* A row exists with some_table.some_column=42 */
+SELECT COALESCE(some_column, '#FAIL', COUNT(*)) AS i FROM some_table WHERE id='42';
+/* Index some_table.some_idx exists: (MySQL) */
+SELECT COALESCE(index_schema, '#FAIL', COUNT(*)) AS i FROM information_schema.statistics
+	WHERE table_schema=DATABASE() AND table_name='some_table' AND index_name='some_idx'
 ROLLBACK;
 
 -- #Revert:
