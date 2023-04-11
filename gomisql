@@ -290,7 +290,7 @@ SELECT COALESCE(index_schema, '#FAIL', COUNT(*)) AS i FROM information_schema.st
 SELECT COALESCE(trigger_name, '#FAIL', COUNT(*)) AS i FROM information_schema.triggers WHERE trigger_schema=DATABASE() AND trigger_name='some_trigger';
 
 /* That an ENUM column has possibility 'foo': (MySQL) */
-SQL set_mode='TRADITIONAL';
+SET sql_mode='TRADITIONAL';
 INSERT INTO some_table SET some_column='foo';
 
 ROLLBACK;
